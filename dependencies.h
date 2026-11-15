@@ -10,6 +10,8 @@
 #include <time.h>
 #include <errno.h>
 #include <poll.h>
+#include <ctype.h>
+#include <limits.h>
 
 
 #define BUFFSIZE 1024

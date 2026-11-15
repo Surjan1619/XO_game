@@ -12,14 +12,13 @@ int mmain (){
     while(1){
         poll(fds, poll_count, -1);
         if (fds[0].revents & POLLIN){
-            printf("stex e, \n");
             int conn_fd = accept(sock_accepter, 0, 0);
             User user = create_user(conn_fd);
             users[user_count++] = user;//adding user into the user list
             
         }
         if (user_count == 2){
-            printf("forking\n");
+            printf("INFO:     forking\n");
             int pid = fork();
             if(pid > 0){//parent
                 user_count = 0;
@@ -57,7 +56,7 @@ int main (){
         }
         if (fds[0].revents & POLLIN){
             int conn_fd = accept(sock_accepter, 0, 0);
-            User user = create_user(conn_fd);
+            User user = create_user(conn_fd);//event where geting from user his information and initilizing structure 
             printf("%s \n", user.username);
             user_queue[user_count++] = user;
             fds[poll_count].fd = user.fd;

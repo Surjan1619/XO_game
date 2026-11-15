@@ -59,3 +59,11 @@ void message_rc_handler(int return_code, int action, int session_fd){
     }
 }
 
+int convert_str_to_int(char * str){
+    for (int i = 0; i < strlen(str); i++){
+        if(!isdigit(str[i])){
+            return -1;
+        }
+    }
+    return atoi(str);
+}

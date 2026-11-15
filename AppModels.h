@@ -5,14 +5,15 @@ typedef struct {
     int map_size;
     int fd;
     char sign;
-    short steps;
+    short step_set;
 }User;
 
 
  typedef struct {
-    User X;
-    User O;
+    User  *X;
+    User  *O;
     int map_size;
-    
-}map;
+    char turn;
+    int map_set;
+}Map;
 
