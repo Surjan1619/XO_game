@@ -1,3 +1,8 @@
+#include "map_handler.h"
+#include <stdlib.h>
+#include <stdio.h>
+#include "../AppModels.h"
+#include <limits.h>
 int user_free_step_handler(Map * map, int step){//check is the layer free while user is making a step
     User * steper = {};
     User * another_user = {};
@@ -85,6 +90,7 @@ void check_map_and_users_set_sincron(Map * map){
 
 int check_map_step_avilability(short map_set){
     short full_map_set = SHRT_MAX;
+    printf("check_map_step_avilability()    map_set-%i\n", map_set);
     if (full_map_set == map_set){
         return 1;//1 means that every cell of the map is used and there is no avilable space
     }

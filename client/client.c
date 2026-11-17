@@ -76,7 +76,7 @@ void message_rc_handler(int return_code, int action, int session_fd){
     else if(action == SEND){
         if(return_code <= 0){
             perror("connection closed or occured error while sending\n");
-            close(session_fd);
+            close(session_fd);int convert_str_to_int(char * str);
             exit(0);
 
         }
@@ -150,17 +150,21 @@ int main(){
             */
             if (pollres && !game_start_status){
                 if (fds[0].revents & POLLIN){ //if recived something from server
+                    memset(msg, 0, BUFFSIZE);
                     int recived = recv(sock_sender, msg, BUFFSIZE, 0);
                     message_rc_handler(recived, RECV, sock_sender);
                     printf("server message-%s\n", msg);
                     if (!strncmp(msg, "START", 5)){
+                        printf("starting the game . . . \n");
                         game_start_status = true;
                     }
                     if (!strcmp(msg, "UX")){//UX means you are X
+                        printf("you are X:\n");
                         client_sign = 'X';
                         opponent_sign = 'O';
                     }
                     else if(!strcmp(msg, "UO")){//UO means you are O
+                        printf("you are O:\n");
                         client_sign = 'O';
                         opponent_sign = 'X';
                     }
@@ -186,7 +190,7 @@ int main(){
                         //handle winner case 
                     }
 
-                    
+
                     /*when user send step to the server 
                     server needs to check his step validate and decide
                     approve or not, and when he approves the step, 
@@ -197,8 +201,8 @@ int main(){
                         printf("INFO:   accepted user sign -'%c' in position'x:%i y:%i'\n", client_sign, sended_x, sended_y);
                         print_matrix(matrix, map_size);
                     }
-                    else if (strncmp(msg , "DRAW", 4)){
-                        printf("daw, won friendship\n");
+                    else if (!strncmp(msg , "DRAW", 4)){
+                        printf("draw, won friendship\n");
                         exit(0);
                     }
                     else {//if no winner signal is received continue the game

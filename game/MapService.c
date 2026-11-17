@@ -1,3 +1,11 @@
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+
+#include "map_service.h"
+#include "map_handler.h"
+#include "../AppModels.h"
+#include "../static.h"
 Map create_map(User * users, int user_count, int map_size){
     Map map = {};
     map.X = &users[0];
@@ -84,15 +92,16 @@ char * user_make_step(Map * map, char ** matrix, int step, char type){//function
         merge_matrix_and_sets(map, matrix);
         //check winner avilability and if winner finded
         //handling winner finded event loop
-        char * result = check_winner_avilability(matrix, map ->map_size);
-        if (*result == 'X' || *result == 'O'){
+        char  result = check_winner_avilability(matrix, map ->map_size);
+        if (result == 'X' || result == 'O'){
             //handle someones win case
         }
         //if no finded winner just ignore 
 
         //check if map is full 
         //if yes, that mean that players drew so we sending the right message
-        if (check_map_step_avilability((short)map ->map_set)){//if map is full
+        
+        if (check_map_step_avilability((short)map ->map_set )){//if map is full
             char * msg = "DRAW";
             strncpy(buff, msg, strlen(msg));
             return buff;        

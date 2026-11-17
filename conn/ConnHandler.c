@@ -1,4 +1,14 @@
-#include "dependencies.h"
+#include "conn_handler.h"
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <ctype.h>
+#include <unistd.h>
+#include "../static.h"
+
 
 
     /*
@@ -43,7 +53,7 @@ void message_rc_handler(int return_code, int action, int session_fd){
             exit(0);
         }
         else{
-            printf("INFO: recived '%i' bytes\n", return_code);
+            //printf("INFO: recived '%i' bytes\n", return_code);
         }
     }
     else if(action == SEND){
@@ -54,7 +64,7 @@ void message_rc_handler(int return_code, int action, int session_fd){
 
         }
         else{
-            printf("INFO: sended '%i' bytes pid-%d\n", return_code, getpid());
+            //printf("INFO: sended '%i' bytes pid-%d\n", return_code, getpid());
         }
     }
 }

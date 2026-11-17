@@ -1,3 +1,14 @@
+#include "event_loops.h"
+#include "../AppModels.h"
+#include "../static.h"
+#include "../game/map_service.h"
+#include "../conn/conn_handler.h"
+#include "tools.h"
+#include <string.h>
+#include <poll.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <sys/socket.h>
 
 //loop to het all info from user 
 //and gcreating struct for him
@@ -35,7 +46,7 @@ User create_user(int fd){
             break;
         }
     }
-    printf("create_user(), user.fd-%d \n", user.fd);
+    printf("create_user(), user.fd-%d user.username-%s\n", user.fd, user.username);
     return user;
 }
 
@@ -62,7 +73,7 @@ int game_loop(User * users){
     fds[1].fd = users[1].fd;
     fds[0].events = POLLIN;
     fds[1].events = POLLIN;
-    printf("got game loop\n");
+
     int map_size;
     if (users[0].map_size == users[1].map_size){
         map_size = users[0].map_size;
@@ -78,11 +89,11 @@ int game_loop(User * users){
     //them turn into "game started mode" 
     
     //sending signs
-    int sended = send(users[0].fd, "UX", 2, 0);
+    int sended = send(users[0].fd, "UX", 3, 0);
     message_rc_handler(sended, SEND, users[0].fd);
-    sended = send(users[1].fd, "UO", 2, 0);
+    sended = send(users[1].fd, "UO", 3, 0);
     message_rc_handler(sended, SEND, users[1].fd);
-    
+
     //broadcasting start signal
     char * start_signal = "START";
     broadcast_message(start_signal, users, 2);
@@ -92,6 +103,7 @@ int game_loop(User * users){
     by using MapService.h functions
     */
     while(1){
+        print_matrix(matrix, map_size);
         int poll_res = poll(fds, 2, -1);
         if (poll_res < 0){ //if there is error while polling just exitin from the process
             perror("error while polling\n");
@@ -100,8 +112,6 @@ int game_loop(User * users){
             for (int i = 0; i < 2; ++i){
                 if (fds[i].revents & POLLIN){
                         int usr_idx = find_usr_by_fd(users, 2, fds[i].fd);//giving user fd to get its index in the users array
-
-
                         //chacking if can user make a step or no
                         //and if he could, handling message
                         if (turn == users[usr_idx].sign){
@@ -140,19 +150,22 @@ int game_loop(User * users){
                                 //handling if user wanna make allowed step and no finded problems
                                 else if (!strncmp(handler, ok_message, strlen(ok_message))){
                                     int send_res = send(users[usr_idx].fd, ok_message, sizeof(ok_message), 0);
-                                    char * msg[3];
+                                    message_rc_handler(send_res, SEND, users[usr_idx].fd);
+                                    char  msg[3];
                                     snprintf(msg, 3, "%hd", user_step);
                                     //after approving player's step we need to send signal into another user about current users step
                                     //so we need to broadcast message to let everybody know about map changes
                                     broadcast_message(msg, users, 2);//where 2 is size of the users array 
+                                    
                                 }
                                 else if (!strncmp(handler, draw_msg, strlen(draw_msg))){ //handling case when players drew
                                     broadcast_message(draw_msg, users, 2);
+                                    break;
                                     
                                 }
                             
                             }
-                            else{//if no finded error VVV
+                            else if (!handler){//if no finded error  and no winner yet VVV
                                 users[usr_idx].step_set |= user_step;//if all tests passes mergeing users sended step
                                                                   //with his step set
                                 merge_matrix_and_sets(&map, matrix);
@@ -168,14 +181,12 @@ int game_loop(User * users){
                             message_rc_handler(recv_res, RECV, users[usr_idx].fd);
                                 
                             broadcast_message(buff, users, 2);
+                            continue;
                         }
                 }
             }
-
-
-
         }
-        sleep(1);
+        printf("end of cycle in game_loop()\n");
         
     }
     free(matrix);
@@ -185,7 +196,8 @@ int game_loop(User * users){
 
 void prepare_game(User * users){
     char buff[BUFFSIZE];
-    strcpy(buff, "finded second player\n");
+    char * msg = "finded second player";
+    strncpy(buff, msg, strlen(msg));
     broadcast_message(buff, users, 2);
     game_loop(users);
 

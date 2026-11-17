@@ -1,5 +1,16 @@
-#include "all_headers.h"
+#include <poll.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
+#include "AppModels.h"
+#include "./event/event_loops.h"
+#include "./conn/conn_handler.h"
+#include "static.h"
+
+/*
 int mmain (){
     int sock_accepter = create_conn();
     struct pollfd fds[20] = {0}; 
@@ -38,7 +49,7 @@ int mmain (){
     }
     
 }
-
+*/
 int main (){
     int sock_accepter = create_conn();
     struct pollfd fds[20] = {0}; 

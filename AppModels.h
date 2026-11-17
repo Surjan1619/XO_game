@@ -1,5 +1,6 @@
 
-
+#ifndef APP_MODELS_H
+#define APP_MODELS_H
 typedef struct {
     char username[30];
     int map_size;
@@ -17,3 +18,4 @@ typedef struct {
     int map_set;
 }Map;
 
+#endif
