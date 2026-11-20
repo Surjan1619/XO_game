@@ -2,10 +2,10 @@
 
 # ❌ XO Game ⭕
 
-### Сетевые крестики-нолики на чистом C
+### Networked Tic-Tac-Toe in pure C
 
-Клиент-серверная игра для двух игроков по **TCP**. Сервер сам подбирает пару<br>
-и запускает для каждой партии отдельный процесс.
+A two-player client–server game over **TCP**. The server pairs players automatically<br>
+and runs every match in its own process.
 
 ![C](https://img.shields.io/badge/language-C-00599C?style=for-the-badge&logo=c&logoColor=white)
 ![Linux](https://img.shields.io/badge/platform-Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black)
@@ -17,59 +17,59 @@
 
 ---
 
-## 📑 Содержание
+## 📑 Table of Contents
 
-- [✨ Возможности](#-возможности)
-- [🌐 Сетевые технологии](#-сетевые-технологии)
-- [🏗 Архитектура сервера](#-архитектура-сервера)
-- [📡 Протокол обмена](#-протокол-обмена)
-- [🧠 Игровая логика: поле в битах](#-игровая-логика-поле-в-битах)
-- [📂 Структура проекта](#-структура-проекта)
-- [🚀 Сборка и запуск](#-сборка-и-запуск)
-- [🎮 Как играть](#-как-играть)
+- [✨ Features](#-features)
+- [🌐 Networking](#-networking)
+- [🏗 Server Architecture](#-server-architecture)
+- [📡 Protocol](#-protocol)
+- [🧠 Game Logic: the Board as Bits](#-game-logic-the-board-as-bits)
+- [📂 Project Structure](#-project-structure)
+- [🚀 Build & Run](#-build--run)
+- [🎮 How to Play](#-how-to-play)
 - [🗺 Roadmap](#-roadmap)
 
 ---
 
-## ✨ Возможности
+## ✨ Features
 
 | | |
 |---|---|
-| 🔌 **TCP-сервер** | принимает любое количество клиентов на порту `8080` |
-| 🤝 **Подбор пары** | первые два зарегистрированных игрока попадают в одну комнату |
-| 🍴 **Комната = процесс** | каждая партия идёт в своём процессе (`fork`), и партии не мешают друг другу |
-| 📦 **Свой протокол** | сообщения с длиной впереди, поэтому TCP их не склеивает |
-| ⚡ **Без потоков** | `poll()` следит за сокетами и `stdin` в одном цикле |
-| 🧮 **Поле в битах** | ходы хранятся битовыми масками, проверка клетки — одна операция `&` |
-| 🛡 **Проверки на сервере** | очерёдность хода и занятость клетки проверяет сервер |
+| 🔌 **TCP server** | accepts any number of clients on port `8080` |
+| 🤝 **Matchmaking** | the first two registered players are put into one room |
+| 🍴 **One room = one process** | every match runs in its own process (`fork`), so matches don't interfere |
+| 📦 **Custom protocol** | length-prefixed messages, so TCP can't glue them together |
+| ⚡ **No threads** | `poll()` watches sockets and `stdin` in a single loop |
+| 🧮 **Bitboard** | moves are stored as bit masks, checking a cell is a single `&` |
+| 🛡 **Server-side checks** | the server checks whose turn it is and whether a cell is taken |
 
 ---
 
-## 🌐 Сетевые технологии
+## 🌐 Networking
 
-Всё построено на **BSD Sockets API** (POSIX), без сторонних библиотек.
+Everything is built on the **BSD Sockets API** (POSIX), no third-party libraries.
 
-### Что используется и где
+### What is used and where
 
-| Технология | Где в коде | Зачем |
+| Technology | Where | Why |
 |---|---|---|
-| `socket(AF_INET, SOCK_STREAM, 0)` | `conn/ConnHandler.c`, `client/client.c` | TCP-сокет поверх **IPv4** |
-| `setsockopt(SO_REUSEADDR)` | `conn/ConnHandler.c` | сервер можно сразу перезапустить на том же порту, без ожидания `TIME_WAIT` |
-| `bind()` + `INADDR_ANY` | `conn/ConnHandler.c` | принимать соединения на всех сетевых интерфейсах |
-| `htons(PORT)` | сервер и клиент | перевод порта в **сетевой порядок байт** (big-endian) |
-| `listen(fd, 5)` | `conn/ConnHandler.c` | очередь из 5 ещё не принятых соединений (backlog) |
-| `accept()` | `main.c` | новый сокет для каждого клиента |
-| `inet_pton()` + `connect()` | `client/client.c` | клиент подключается к `127.0.0.1:8080` |
-| `poll()` | `main.c`, `event/EventLoops.c`, `client/client.c` | **I/O-мультиплексирование**: ждать сразу несколько fd |
-| `POLLIN` / `POLLHUP` / `POLLERR` | там же | данные пришли / соединение закрыто / ошибка |
-| `fork()` | `main.c` | модель **process-per-room**: своя игра в своём процессе |
-| `send(..., MSG_NOSIGNAL)` | `send_msg()` | если клиент отключился, `send` вернёт ошибку и не убьёт процесс сигналом `SIGPIPE` |
-| `recv(..., MSG_WAITALL)` | `recv_msg()` | ждать, пока не придёт **ровно** нужное число байт |
-| Length-prefixed framing | `send_msg()` / `recv_msg()` | разделять сообщения в потоке TCP |
+| `socket(AF_INET, SOCK_STREAM, 0)` | `conn/ConnHandler.c`, `client/client.c` | a TCP socket over **IPv4** |
+| `setsockopt(SO_REUSEADDR)` | `conn/ConnHandler.c` | the server can restart on the same port right away, without waiting for `TIME_WAIT` |
+| `bind()` + `INADDR_ANY` | `conn/ConnHandler.c` | accept connections on all network interfaces |
+| `htons(PORT)` | server and client | converts the port to **network byte order** (big-endian) |
+| `listen(fd, 5)` | `conn/ConnHandler.c` | a queue of up to 5 pending connections (backlog) |
+| `accept()` | `main.c` | a new socket for every client |
+| `inet_pton()` + `connect()` | `client/client.c` | the client connects to `127.0.0.1:8080` |
+| `poll()` | `main.c`, `event/EventLoops.c`, `client/client.c` | **I/O multiplexing**: wait on several fds at once |
+| `POLLIN` / `POLLHUP` / `POLLERR` | same places | data arrived / connection closed / error |
+| `fork()` | `main.c` | **process-per-room** model: each match in its own process |
+| `send(..., MSG_NOSIGNAL)` | `send_msg()` | if a client disconnects, `send` returns an error instead of killing the process with `SIGPIPE` |
+| `recv(..., MSG_WAITALL)` | `recv_msg()` | wait until **exactly** the requested number of bytes has arrived |
+| Length-prefixed framing | `send_msg()` / `recv_msg()` | split the TCP byte stream into messages |
 
-### 🔁 TCP — это поток, а не сообщения
+### 🔁 TCP is a stream, not messages
 
-У каждого сокета есть **буфер приёма**, и он работает как очередь (FIFO). Байты приходят в том порядке, в каком их отправили, но **границ между `send()` нет**:
+Every socket has a **receive buffer** that works like a FIFO queue. Bytes arrive in the order they were sent, but **there are no boundaries between `send()` calls**:
 
 ```text
 send("UX")     ──►  ┌─────────────────────────┐
@@ -77,7 +77,7 @@ send("START")  ──►  │ U X S T A R T           │  ──►  recv(fd, b
                     └─────────────────────────┘
 ```
 
-Поэтому каждое сообщение начинается с байта длины, и получатель точно знает, сколько читать:
+That is why every message starts with a length byte, so the receiver knows exactly how much to read:
 
 ```text
 send_msg("UX")     ──►  ┌──────────────────────────────────┐
@@ -85,70 +85,70 @@ send_msg("START")  ──►  │ 02 U X 05 S T A R T              │
                         └──────────────────────────────────┘
                           │  └┬┘  │  └───┬───┘
                           │   │   │      └─ recv(5) → "START" ✅
-                          │   │   └──────── recv(1) → длина 5
+                          │   │   └──────── recv(1) → length 5
                           │   └──────────── recv(2) → "UX"    ✅
-                          └──────────────── recv(1) → длина 2
+                          └──────────────── recv(1) → length 2
 ```
 
-### ⚡ `poll()`: одна нить следит за всем
+### ⚡ `poll()`: one thread watches everything
 
-- **Сервер (главный процесс)** следит за слушающим сокетом и сокетами ожидающих игроков.
-- **Игровой процесс** следит за сокетами двух игроков.
-- **Клиент** следит за сокетом сервера и `stdin`, поэтому может одновременно ждать ход соперника и ваш ввод.
+- **Server (main process)** watches the listening socket and the sockets of waiting players.
+- **Game process** watches the sockets of its two players.
+- **Client** watches the server socket and `stdin`, so it can wait for the opponent's move and for your input at the same time.
 
 ---
 
-## 🏗 Архитектура сервера
+## 🏗 Server Architecture
 
 ```mermaid
 flowchart TD
-    A([🚀 старт сервера]) --> B["create_conn()<br/>socket → setsockopt → bind → listen"]
+    A([🚀 server start]) --> B["create_conn()<br/>socket → setsockopt → bind → listen"]
     B --> C{"poll()"}
-    C -->|новое соединение| D["accept()"]
-    D --> E["create_user()<br/>имя + размер поля"]
-    E --> F{"в очереди<br/>2 игрока?"}
-    F -->|нет| C
-    F -->|да| G["fork()"]
-    G -->|родитель| H["закрыть сокеты игроков,<br/>очистить очередь"]
+    C -->|new connection| D["accept()"]
+    D --> E["create_user()<br/>name + board size"]
+    E --> F{"2 players<br/>in queue?"}
+    F -->|no| C
+    F -->|yes| G["fork()"]
+    G -->|parent| H["close player sockets,<br/>clear the queue"]
     H --> C
-    G -->|потомок| I["prepare_game()"]
-    I --> J["game_loop()<br/>poll по двум игрокам"]
+    G -->|child| I["prepare_game()"]
+    I --> J["game_loop()<br/>poll on both players"]
     J --> K([🏁 WINNER / DRAW → exit])
 ```
 
-> 💡 После `fork()` у родителя и у потомка **одни и те же** открытые сокеты.
-> Родитель закрывает свои копии сокетов игроков. Иначе соединение не закроется
-> даже после того, как игровой процесс завершится.
+> 💡 After `fork()` the parent and the child share the **same** open sockets.
+> The parent closes its copies of the player sockets. Otherwise the connection
+> would stay open even after the game process exits.
 
 ---
 
-## 📡 Протокол обмена
+## 📡 Protocol
 
-### Формат кадра
+### Frame format
 
 ```text
 ┌──────────────┬───────────────────────────────┐
-│   1 байт     │        N байт (0 … 255)       │
-│  длина = N   │     текст сообщения, без \0   │
+│   1 byte     │        N bytes (0 … 255)      │
+│  length = N  │    message text, without \0   │
 └──────────────┴───────────────────────────────┘
 ```
 
-| Сообщение | Байты в сети |
+| Message | Bytes on the wire |
 |---|---|
 | `"UX"` | `02 55 58` |
 | `"START"` | `05 53 54 41 52 54` |
 | `"256"` | `03 32 35 36` |
 
-Длина хранится в `unsigned char`, поэтому одно сообщение — не больше **255 байт**.
+The length is stored in an `unsigned char`, so a single message is at most **255 bytes**.
 
-### Ход партии
+### Match flow
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant X as 🧑 Клиент 1
-    participant S as 🖥 Сервер
-    participant O as 🧑 Клиент 2
+    participant X as 🧑 Client 1
+    participant S as 🖥 Server
+    participant O as 🧑 Client 2
 
     X->>S: connect()
     S->>X: please enter your name
@@ -157,9 +157,9 @@ sequenceDiagram
     X->>S: 3
     S->>X: waiting for a new clients ...
 
-    O->>S: connect() и та же регистрация
+    O->>S: connect() and the same registration
 
-    Note over S: fork() — создаётся игровая комната
+    Note over S: fork() creates the game room
 
     S->>X: finded second player
     S->>O: finded second player
@@ -168,10 +168,10 @@ sequenceDiagram
     S->>X: START
     S->>O: START
 
-    loop пока нет победителя
-        X->>S: 256  (ход битовой маской)
+    loop until there is a winner
+        X->>S: 256  (move as a bit mask)
         S->>X: OK
-        S->>O: 256  (ход соперника)
+        S->>O: 256  (opponent's move)
         O->>S: 16
         S->>O: OK
         S->>X: 16
@@ -181,124 +181,124 @@ sequenceDiagram
     S->>O: WINNER X
 ```
 
-### Справочник сообщений
+### Message reference
 
-| Направление | Сообщение | Значение |
+| Direction | Message | Meaning |
 |---|---|---|
-| 🖥 → 🧑 | `UX` / `UO` | «вы играете за X / за O» |
-| 🖥 → 🧑 | `START` | игра началась, клиент переходит в режим ходов |
-| 🧑 → 🖥 | `"<число>"` | ход: маска с одной единицей, например `256` |
-| 🖥 → 🧑 | `OK` | ваш ход принят |
-| 🖥 → 🧑 | `"<число>"` | ход соперника |
-| 🖥 → 🧑 | `not your turn` | сейчас ход соперника |
-| 🖥 → 🧑 | `not valid format` | пришло не число |
-| 🖥 → 🧑 | `WARING …` | клетка уже занята |
-| 🖥 → 🧑 | `WINNER X` / `WINNER O` | конец игры, есть победитель |
-| 🖥 → 🧑 | `DRAW` | ничья |
+| 🖥 → 🧑 | `UX` / `UO` | "you play as X / as O" |
+| 🖥 → 🧑 | `START` | the game has started, the client switches to move mode |
+| 🧑 → 🖥 | `"<number>"` | a move: a mask with a single 1 bit, e.g. `256` |
+| 🖥 → 🧑 | `OK` | your move was accepted |
+| 🖥 → 🧑 | `"<number>"` | the opponent's move |
+| 🖥 → 🧑 | `not your turn` | it's the opponent's turn |
+| 🖥 → 🧑 | `not valid format` | the message is not a number |
+| 🖥 → 🧑 | `WARING …` | the cell is already taken |
+| 🖥 → 🧑 | `WINNER X` / `WINNER O` | game over, there is a winner |
+| 🖥 → 🧑 | `DRAW` | draw |
 
-### 🔮 Следующая версия: бинарный протокол
+### 🔮 Next version: a binary protocol
 
-В `protocol/protocol.h` описан заголовок фиксированного размера, **6 байт**:
+`protocol/protocol.h` describes a fixed-size **6-byte** header:
 
 ```c
 typedef struct {
-    uint8_t  type;      // тип сообщения: enum MsgType
-    uint8_t  reserved;  // всегда 0
-    uint16_t value;     // ход / размер поля / знак — в network byte order
-    uint16_t len;       // длина текста после заголовка
+    uint8_t  type;      // message type: enum MsgType
+    uint8_t  reserved;  // always 0
+    uint16_t value;     // move / board size / sign — in network byte order
+    uint16_t len;       // length of the text after the header
 } __attribute__((packed)) MsgHeader;
 ```
 
-- `__attribute__((packed))` убирает выравнивание, и структура занимает ровно 6 байт.
-- `uint16_t` передаются в сетевом порядке байт, поэтому их нужно переводить через `htons()` / `ntohs()`.
-- Тип сообщения (`MSG_STEP`, `MSG_WIN`, `MSG_DRAW` …) — это число, а не строка, поэтому парсить текст не нужно.
+- `__attribute__((packed))` removes padding, so the struct is exactly 6 bytes.
+- `uint16_t` fields travel in network byte order and must be converted with `htons()` / `ntohs()`.
+- The message type (`MSG_STEP`, `MSG_WIN`, `MSG_DRAW` …) is a number, not a string, so no text parsing is needed.
 
 ---
 
-## 🧠 Игровая логика: поле в битах
+## 🧠 Game Logic: the Board as Bits
 
-Каждая клетка — один бит числа. Клетка `(i, j)` поля `n × n` соответствует биту:
+Each cell is one bit of a number. Cell `(i, j)` on an `n × n` board maps to bit:
 
 $$\text{bit}(i, j) = (n - 1 - i) \cdot n + (n - 1 - j)$$
 
-Для поля 3 × 3:
+For a 3 × 3 board:
 
 ```text
-        столбец 1   столбец 2   столбец 3
-строка 1   256         128          64
-строка 2    32          16           8
-строка 3     4           2           1
+         column 1   column 2   column 3
+row 1       256        128         64
+row 2        32         16          8
+row 3         4          2          1
 ```
 
-| Что | Как |
+| What | How |
 |---|---|
-| ходы игрока | `user.step_set`: OR всех его ходов |
-| всё поле | `map.map_set = X.step_set \| O.step_set` |
-| клетка занята? | `map_set & step` |
-| сделать ход | `step_set \|= step` |
-| ход корректен? | в маске ровно **одна** единица |
-| поле заполнено | `map_set == (1 << n*n) - 1` → для 3 × 3 это `511` |
+| a player's moves | `user.step_set`: OR of all their moves |
+| the whole board | `map.map_set = X.step_set \| O.step_set` |
+| is the cell taken? | `map_set & step` |
+| make a move | `step_set \|= step` |
+| is the move valid? | the mask has exactly **one** 1 bit |
+| board is full | `map_set == (1 << n*n) - 1` → `511` for 3 × 3 |
 
-**Пример.** Игрок вводит `2 2`, клиент переводит это в `16` (центр поля) и отправляет на сервер строку `"16"`.
+**Example.** The player types `2 2`, the client turns it into `16` (the center) and sends the string `"16"` to the server.
 
-**Победитель.** `check_winner_avilability()` проверяет `n` строк, `n` столбцов и 2 диагонали. Пустые клетки (`#`) не учитываются, поэтому функция работает для любого `n`.
+**Winner.** `check_winner_avilability()` checks `n` rows, `n` columns and both diagonals. Empty cells (`#`) are skipped, so the function works for any `n`.
 
 ---
 
-## 📂 Структура проекта
+## 📂 Project Structure
 
 ```text
 XO_game/
-├── main.c                 🚪 точка входа сервера: accept, очередь, fork
-├── AppModels.h            🧱 структуры User и Map
+├── main.c                 🚪 server entry point: accept, queue, fork
+├── AppModels.h            🧱 User and Map structs
 ├── static.h               ⚙️  BUFFSIZE, PORT, SEND/RECV
 │
-├── conn/                  🌐 сетевой слой
-│   ├── ConnHandler.c         create_conn, send_msg, recv_msg, обработка ошибок
+├── conn/                  🌐 network layer
+│   ├── ConnHandler.c         create_conn, send_msg, recv_msg, error handling
 │   └── conn_handler.h
 │
-├── event/                 🔄 события и игровой цикл
+├── event/                 🔄 events and the game loop
 │   ├── EventLoops.c          create_user, broadcast_message, game_loop
 │   ├── event_loops.h
 │   ├── tools.c               find_usr_by_fd
 │   └── tools.h
 │
-├── game/                  🎲 правила игры
-│   ├── MapService.c          матрица, перевод маски в координаты, ход
+├── game/                  🎲 game rules
+│   ├── MapService.c          matrix, mask ↔ coordinates, making a move
 │   ├── map_service.h
-│   ├── MapHandler.c          занятость клетки, победитель, ничья
+│   ├── MapHandler.c          cell availability, winner, draw
 │   └── map_handler.h
 │
-├── protocol/              📦 бинарный протокол (в разработке)
+├── protocol/              📦 binary protocol (work in progress)
 │   ├── protocol.h
 │   └── protocol.c
 │
-├── client/                🧑 консольный клиент
+├── client/                🧑 console client
 │   └── client.c
 │
-└── test/                  🧪 черновые тесты
+└── test/                  🧪 draft tests
     └── test.c
 ```
 
 ---
 
-## 🚀 Сборка и запуск
+## 🚀 Build & Run
 
-**Нужно:** Linux (или другая POSIX-система) и `gcc`.
+**Requirements:** Linux (or another POSIX system) and `gcc`.
 
-Сервер:
+Server:
 
 ```bash
 gcc main.c conn/ConnHandler.c event/EventLoops.c event/tools.c game/MapHandler.c game/MapService.c -o server
 ```
 
-Клиент:
+Client:
 
 ```bash
 gcc client/client.c -o client/a.out
 ```
 
-Запуск: сервер в одном терминале, клиенты в двух других.
+Run the server in one terminal and a client in each of two others:
 
 ```bash
 ./server
@@ -310,48 +310,48 @@ gcc client/client.c -o client/a.out
 
 ---
 
-## 🎮 Как играть
+## 🎮 How to Play
 
-1. 🧑 Введите **имя**.
-2. 📐 Введите **размер поля**: сейчас поддерживается только `3`.
-3. ⏳ Подождите второго игрока. Когда он подключится, придёт `UX` или `UO` и затем `START`.
-4. ❌ Первым ходит **X**. Ход вводится двумя числами `строка столбец` от 1 до 3:
+1. 🧑 Enter your **name**.
+2. 📐 Enter the **board size**: only `3` is supported for now.
+3. ⏳ Wait for a second player. When they connect you get `UX` or `UO`, then `START`.
+4. ❌ **X** moves first. Enter a move as two numbers `row column`, each from 1 to 3:
 
    ```text
    2 2
    ```
 
-5. 🏆 Кто первым соберёт линию, тот победил. Если поле заполнено и линии нет, это ничья.
+5. 🏆 The first to complete a line wins. If the board is full with no line, it's a draw.
 
 ```text
 X O #
-# X #      # — свободная клетка
-O # X      ← X победил по диагонали
+# X #      # — empty cell
+O # X      ← X wins on the diagonal
 ```
 
 ---
 
 ## 🗺 Roadmap
 
-- [x] TCP-сервер на BSD sockets
-- [x] Протокол с длиной сообщения впереди
-- [x] Подбор пары и игровые комнаты через `fork()`
-- [x] `poll()` на сервере и в клиенте
-- [x] Проверка победителя для поля `n × n`
-- [ ] Исправить раскладку маски по матрице (`merge_matrix_and_sets`)
-- [ ] Определение ничьей через `(1 << n*n) - 1`
-- [ ] Полная проверка хода на сервере: одна единица и в пределах поля
-- [ ] Сообщить сопернику, если игрок отключился
-- [ ] Регистрация игроков без блокировки главного цикла
-- [ ] Перейти на бинарный протокол из `protocol/protocol.h`
-- [ ] Поддержка полей больше 3 × 3
-- [ ] IP-адрес сервера в аргументах клиента
+- [x] TCP server on BSD sockets
+- [x] Length-prefixed message protocol
+- [x] Matchmaking and game rooms via `fork()`
+- [x] `poll()` on both server and client
+- [x] Winner check for an `n × n` board
+- [ ] Fix mapping the mask onto the matrix (`merge_matrix_and_sets`)
+- [ ] Detect a draw with `(1 << n*n) - 1`
+- [ ] Full move validation on the server: one bit and inside the board
+- [ ] Notify the opponent when a player disconnects
+- [ ] Register players without blocking the main loop
+- [ ] Switch to the binary protocol from `protocol/protocol.h`
+- [ ] Support boards larger than 3 × 3
+- [ ] Server IP address as a client argument
 - [ ] `Makefile`
 
 ---
 
 <div align="center">
 
-Сделано на C, сокетах и битовых масках ❤️
+Made with C, sockets and bit masks ❤️
 
 </div>
