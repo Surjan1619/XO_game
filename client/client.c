@@ -25,7 +25,7 @@ int print_matrix(char ** map, int map_size){
     printf("\n___________\n");
 }
 
-
+//FOR TEST
 int init_step(char ** map,int map_size, int x, int y){//converting cordinate from x y fromat into binary
     int step = 1;
     for(int i = map_size - 1; i >= 0 ; i--){
@@ -38,17 +38,59 @@ int init_step(char ** map,int map_size, int x, int y){//converting cordinate fro
     }
     return -1;
 }
-int decode_opponent_step(int step,int map_size, int *x, int *y){
-    *x = map_size - 1;
-    *y = map_size - 1;
-    for (*x; *x >=0; *x--){
-        for(*y; *y >= 0; *y--){
+
+//chech if the sended step_set contains only one symbol to avoid unexpected cases
+int validate_sended_step(int step){
+    int numbers_count = 0;
+    while(step){
+        if (step & 1){
+            ++numbers_count;
+        }
+        step >>= 1;
+    }
+    if (numbers_count != 1){
+        return -1;//if after validating count of number '1' is not equal 1 returning error signal
+    }
+    return 1;
+}
+
+//decoding binary fromat sended message into x and y cordinates
+int binar_into_cordinates(int step,int map_size, int *x, int *y){
+    
+    if (validate_sended_step(step) < 0){
+        printf("ERROR: non valid step_set ::binar->cord\n");
+        return -1;
+    }
+    for (int i = map_size - 1;i >= 0; i--){
+        for (int j = map_size - 1; j >= 0; j--){
             if (step == 1){
+                //saving the values of the x and y into user understanding fromat
+                *x = i;
+                *y = j;
                 return 1;
             }
+            step >>= 1;
         }
     }
     return 0;
+}
+
+int cordinate_into_binary(int * step, int map_size, int x, int y){
+    *step = 1;
+    //decreasing the values of the x and y because they are user understanding format 
+    for (int i = map_size - 1; i >= 0 ; i--){
+        for (int j = map_size - 1; j >= 0; j--){
+            if (x == i && y == j){
+                return 1;
+            }
+            *step <<= 1;
+        }
+    }
+    if (validate_sended_step(*step) < 0){
+        printf("ERROR: non valid step_set ::cord->binar\n");
+        return -1;
+    }
+    return 1;
 }
 
 char ** init_matrix(int map_size){//initilizing map and filling fields with whitespace to mark
@@ -85,15 +127,34 @@ void message_rc_handler(int return_code, int action, int session_fd){
         }
     }
 }
+/*
+this 2 function is protocol function
+where first byte is header and means how many bytes contain the text*/
+int send_msg(int fd, const char *text) {
+    int text_len = strlen(text);
+    if (text_len > 255) return -1;
+    unsigned char len = (unsigned char)text_len;
+    if (send(fd, &len, 1, MSG_NOSIGNAL) != 1) return -1;
+    if (len && send(fd, text, len, MSG_NOSIGNAL) != len) return -1;
+    return 1;
+}
+
+int recv_msg(int fd, char * text){
+    unsigned char text_len;
+    if (recv(fd, &text_len, 1, MSG_WAITALL) != 1) return -1;
+    if (text_len && recv(fd, text, text_len, MSG_WAITALL) != text_len) return -1;
+    text[text_len] = '\0';
+    return 1;
+}
 
 
 
 
 
 int main(){
-    int test;
-    scanf("%i", &test);
-    if (!test){
+    //int test;
+    //scanf("%i", &test);
+    if (1){
         int sock_sender = socket(AF_INET, SOCK_STREAM, 0);//creating sonnection accepter table
         if(sock_sender < 0){ //avoiding from incorrect creation
             perror("error while creating socket file\n");
@@ -115,8 +176,8 @@ int main(){
         }
 
         char msg[BUFFSIZE] = {0};
-        int recived = recv(sock_sender, msg, BUFFSIZE, 0);
-        msg[recived] = '\0';
+        int recived = recv_msg(sock_sender, msg);
+        message_rc_handler(recived, RECV, sock_sender);
         printf("%s\n", msg);
         struct pollfd fds[2] = {0};
         //here 1 is the stdin listener
@@ -151,29 +212,31 @@ int main(){
             if (pollres && !game_start_status){
                 if (fds[0].revents & POLLIN){ //if recived something from server
                     memset(msg, 0, BUFFSIZE);
-                    int recived = recv(sock_sender, msg, BUFFSIZE, 0);
+                    int recived = recv_msg(sock_sender, msg);
                     message_rc_handler(recived, RECV, sock_sender);
                     printf("server message-%s\n", msg);
                     if (!strncmp(msg, "START", 5)){
                         printf("starting the game . . . \n");
                         game_start_status = true;
                     }
-                    if (!strcmp(msg, "UX")){//UX means you are X
+                    else if (!strncmp(msg, "UX", 2)){//UX means you are X
                         printf("you are X:\n");
                         client_sign = 'X';
                         opponent_sign = 'O';
                     }
-                    else if(!strcmp(msg, "UO")){//UO means you are O
+                    else if(!strncmp(msg, "UO", 2)){//UO means you are O
                         printf("you are O:\n");
                         client_sign = 'O';
                         opponent_sign = 'X';
                     }
+
                 }
                 if (fds[1].revents & POLLIN){//if user wants to send a message
                     memset(msg, 0, BUFFSIZE);
-                    int readed = read(STDIN_FILENO, msg, BUFFSIZE);
+                    int readed = read(STDIN_FILENO, msg, 255);
                     if (readed){
-                        int send_res = send(sock_sender, msg, strlen(msg), 0);
+                        msg[strcspn(msg, "\n")] = '\0';
+                        int send_res = send_msg(sock_sender, msg);
                         message_rc_handler(send_res, SEND, sock_sender);
                     }
                 }
@@ -182,61 +245,62 @@ int main(){
             //code part where game already started
             else if (pollres && game_start_status){
                 if (fds[0].revents & POLLIN){ //if recived something from server
-                    int recived = recv(sock_sender, msg, BUFFSIZE, 0);
+                    memset(msg, 0, BUFFSIZE);
+                    int recived = recv_msg(sock_sender, msg);
                     message_rc_handler(recived, RECV, sock_sender);
-                    printf("server message-%s\n", msg);
                     //NOTE : handle case when sened not number containing message
+                    char * waring = "WARING";
                     if (!strncmp(msg, "WINNER", 6)){
-                        //handle winner case 
-                    }
-
-
-                    /*when user send step to the server 
-                    server needs to check his step validate and decide
-                    approve or not, and when he approves the step, 
-                    we need to add it into our map*/
-                    else if (!strncmp(msg, "OK", 3)){
-                        //if server approves the step we just rendering it in the our map
-                        matrix[sended_x][sended_y] = client_sign;
-                        printf("INFO:   accepted user sign -'%c' in position'x:%i y:%i'\n", client_sign, sended_x, sended_y);
-                        print_matrix(matrix, map_size);
+                        //handle winner case
+                        char winner;
+                        char * garbage;
+                        sscanf(msg, "%s %c", garbage, &winner);
+                        printf("winner is %c\n", winner);
+                        exit(0);   
                     }
                     else if (!strncmp(msg , "DRAW", 4)){
                         printf("draw, won friendship\n");
                         exit(0);
                     }
-                    else {//if no winner signal is received continue the game
+                    else if (!strncmp(msg, "OK", 2)){
+                        printf("server approved step\n");
+                        matrix[sended_x][sended_y] = client_sign;
+                        print_matrix(matrix, map_size);
+                        continue;
+                    }
+                    else if (!strncmp(msg, waring, strlen(waring))){
+                        printf("position is already in using choose another\n");
+                        continue;
+                    }
+                    else {//if  winner signal is not received continue the game
+                        char * end;
+                        int msg_set = strtol(msg, &end, 10);
+                        if(validate_sended_step(msg_set) < 0){
+                            continue;
+                            //not ok, sended signal contains more than one '1'-s
+                        }
+                        int recived_x, recived_y;
+                        binar_into_cordinates(msg_set, map_size, &recived_x, &recived_y);
+                        matrix[recived_x][recived_y] = opponent_sign;
+                        print_matrix(matrix, map_size);
 
-                        int server_sended_step;
-                        sscanf(msg, "%i", &server_sended_step);
-                        int x, y;//definig cordinates to give them value later;
-                        
-                        //giving x  and y to the function "decode_opponent_step()"to initilize their values
-                        //and validating the step to avoid non real values
-                        if (decode_opponent_step(server_sended_step, map_size, &x, &y)){
-                            
-                            
-                            // ' '-is for player mode and '#' is for tests 
-                            if (matrix[x][y] == ' '  || matrix[x][y] == '#'){//check if there is a free position and then make move
-                                matrix[x][y] = opponent_sign;
-                            }
-                            else{
-                                printf("WARING:     this position is already using\n");
-                                //handle case when server sends non valid(buisy) cordinate
-                            }
-                        }
-                        else{
-                            //handle case when occured error while decoding position binary fromat
-                            printf("WARING:  error while decoding position binary fromat\n");
-                        }
                     }
                 }
                 if (fds[1].revents & POLLIN){//if user wants to send a message
                     memset(msg, 0, BUFFSIZE);
-                    int readed = read(STDIN_FILENO, msg, BUFFSIZE);//reading users message from stdin
+                    int readed = read(STDIN_FILENO, msg, 255);//reading users message from stdin
                     if (readed){
                         sscanf(msg, "%i %i", &sended_x, &sended_y);
-                        int send_res = send(sock_sender, msg, strlen(msg), 0);
+                        int step_set = 1;
+                        sended_x--;
+                        sended_y--;
+                        cordinate_into_binary(&step_set, map_size, sended_x, sended_y);
+                        snprintf(msg, BUFFSIZE, "%d", step_set);
+                        if (step_set > 256){
+                            printf("invalid message\n");
+                            continue;
+                        }
+                        int send_res = send_msg(sock_sender, msg);
                         message_rc_handler(send_res, SEND, sock_sender);
                     }
                 }
@@ -257,15 +321,20 @@ int main(){
             scanf("%i %i", &x, &y);
             x--;
             y--;
+            printf("here x-%d, y-%d", x, y);
             if (x >= map_size || y >= map_size){
                 printf("size of map nor required\n no such a cordiante\n");
                 exit(1);
             }
             printf("\n");
-            int step = init_step(matrix, map_size, x, y);
-            printf("step-%b\n", step);
+            int step;
+            cordinate_into_binary(&step, map_size, x, y);
+            printf("step_binary-%b\n", step);
             matrix[x][y] = 'X';
-            print_matrix(matrix, map_size);
+            //print_matrix(matrix, map_size);
+            binar_into_cordinates(step, map_size, &x, &y);
+            printf("after bin-cord x-%d, y-%d\n", x, y);
+
         }
     }
 }

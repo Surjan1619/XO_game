@@ -78,6 +78,8 @@ int main (){
                 printf("forking\n");
                 int pid = fork();
                 if(pid > 0){//parent
+                    close(user_queue[0].fd);
+                    close(user_queue[1].fd);
                     user_count = 0;
                     poll_count = 1;
                     memset(user_queue, 0, 20);
@@ -97,10 +99,14 @@ int main (){
         for (int i = 1; i < poll_count; i++){
             if (fds[i].revents & POLLIN){
                 char buff[BUFFSIZE];
-                recv(fds[i].fd, buff, BUFFSIZE, 0);
-                printf("%s", buff);
-                char * msg = "wating for a new clinets . . . \n";
-                int send_res = send(fds[i].fd, msg, strlen(msg), 0);
+                if (recv_msg(fds[i].fd, buff) < 0){
+                    close(fds[i].fd);
+                    fds[i].fd = -1;
+                    continue;
+                }
+                printf("%s\n", buff);
+                char * msg = "wating for a new clinets . . . ";
+                int send_res = send_msg(fds[i].fd, msg);
                 message_rc_handler(send_res, SEND, fds[i].fd);
             }
         }

@@ -77,3 +77,22 @@ int convert_str_to_int(char * str){
     }
     return atoi(str);
 }
+
+int send_msg(int fd, const char *text) {
+    int text_len = strlen(text);  
+    if (text_len > 255) return -1;   
+    unsigned char len = (unsigned char)text_len;
+    //flag MSG_NOSIGNAL helps to handle case when user closed the connection
+    if (send(fd, &len, 1, MSG_NOSIGNAL) != 1) return -1;//in first sending how many bites wi will send in text
+    //and then sending text
+    if (len && send(fd, text, len, MSG_NOSIGNAL) != len) return -1;
+    return 1;
+}
+
+int recv_msg(int fd, char * text){
+    unsigned char text_len;   //MSG_WAITALL helps us to wait to the whole message
+    if (recv(fd, &text_len, 1, MSG_WAITALL) != 1) return -1;//reading first byte where is the size of the message
+    if (text_len && recv(fd, text, text_len, MSG_WAITALL) != text_len) return -1;//reading the message
+    text[text_len] = '\0';
+    return 1;
+}

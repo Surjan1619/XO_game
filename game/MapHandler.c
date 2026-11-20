@@ -4,70 +4,50 @@
 #include "../AppModels.h"
 #include <limits.h>
 int user_free_step_handler(Map * map, int step){//check is the layer free while user is making a step
-    User * steper = {};
-    User * another_user = {};
-    if (map -> turn == 'X'){
-        steper = map -> X;
-        another_user = map -> O;
-    }else{
-        steper = map -> O;
-        another_user = map -> X;
-    }
-    if (steper -> step_set & step){
+    if (map ->map_set & step){
+        printf("not valid step,position is already in use\n");
         return 0;
     }
-    if (another_user -> step_set & step){
-        return 0;
-    }
-    //if all test are passes merging user sended set with whole set
-    map -> map_set | step;
+    printf("step & step: %i\n", map -> map_set & step);
+    map -> map_set |= step;
     return 1;//returning 1 if everything is ok
 }
 
 char check_winner_avilability(char ** matrix, int matrix_size){
-    for (int i = 0 ; i < matrix_size; i++){
+    int n = matrix_size;
+
+    for (int i = 0; i < n; i++){
         char target = matrix[i][0];
-        char row = 0;
-        char col = 0;
-        for (int j = 0; j< matrix_size; j ++){//interpriting j as a element of the line
-            if (matrix[i][j] == target){ //and checking horizonal lines
-                row++;
-            }
-            else if (matrix[j][i] == target){
-                col++;
-            }
-            else{
-                break;
-            }
+        if (target != '#'  && target != ' '){
+            int j = 1;
+            while (j < n && matrix[i][j] == target) j++;
+            if (j == n) return target;
         }
-        if (row == matrix_size || col == matrix_size){
-            return target;
-        }
-    }
-    int i = 0, j = 0;
-    if (matrix_size == 3){
-        char target = matrix[i][j];
-        char diagonal = 0;
-        char op_diagonal = 0; //opposite diagonal
-        while(i < matrix_size && j < matrix_size){
-            if(matrix[i][i] == target){
-                diagonal++;
-            }else if(matrix[i][matrix_size - i]){
-                op_diagonal++;
-            }
-        }
-        if (diagonal == matrix_size || op_diagonal == matrix_size){
-            return target;
-        }
-    }else{/*if matrix size if more than 3 implementing another algorythm to 
-        check diagonals
-        */
-       return 0;//not implemented yet
-    }
-    return 0;//returning 0 if not finded matches
 
+        target = matrix[0][i];
+        if (target != '#'  && target != ' '){
+            int j = 1;
+            while (j < n && matrix[j][i] == target) j++;
+            if (j == n) return target;
+        }
+    }
+
+    char target = matrix[0][0];
+    if (target != '#'  && target != ' '){
+        int i = 1;
+        while (i < n && matrix[i][i] == target) i++;
+        if (i == n) return target;
+    }
+
+    target = matrix[0][n - 1];
+    if (target != '#'  && target != ' '){
+        int i = 1;
+        while (i < n && matrix[i][n - 1 - i] == target) i++;
+        if (i == n) return target;
+    }
+
+    return 0;
 }
-
 
 
 /*
@@ -77,10 +57,11 @@ if users set doesnt equal whole mpa  that
 means that maps are desyncronized
 */
 void check_map_and_users_set_sincron(Map * map){
+    printf("map_set-%i, x_set-%i, o_set-%i\n", map ->map_set, map->X->step_set, map->O->step_set);
     int map_set = map ->map_set;
     int usr1_set = map ->X -> step_set;
     int usr2_set = map ->O -> step_set;
-    if (map_set != usr1_set | usr2_set){
+    if (map_set != (usr1_set | usr2_set)){
         perror("syncronization error: map sets doesnt matching\n");
         exit(EXIT_FAILURE);
     }

@@ -9,7 +9,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/socket.h>
-
+#include <unistd.h>
+#include <arpa/inet.h>
 //loop to het all info from user 
 //and gcreating struct for him
 
@@ -17,12 +18,12 @@ User create_user(int fd){
     User user = {0};
     user.fd = fd;
     char buff[BUFFSIZE] = {0};
-    strcpy(buff, "please enter your name\n");
-    int send_res = send(fd, buff, strlen(buff), 0);
+    strcpy(buff, "please enter your name");
+    int send_res = send_msg(fd, buff);
     message_rc_handler(send_res, SEND, fd);
     memset(buff, 0, BUFFSIZE);
-    //reciving the username 
-    int recv_res = recv(fd, buff, BUFFSIZE, 0);
+    //reciving the username
+    int recv_res = recv_msg(fd, buff);
     message_rc_handler(recv_res, RECV, fd);
     int username_size = 29;//saveing the username
     strncpy(user.username, buff, username_size);
@@ -31,17 +32,16 @@ User create_user(int fd){
         memset(buff, 0, BUFFSIZE);
         strcpy(buff, "enter the map size");
         
-        send_res = send(fd,buff, strlen(buff), 0);
+        send_res = send_msg(fd, buff);
         message_rc_handler(send_res, SEND, fd);
 
-        recv_res = recv(fd, buff, BUFFSIZE, 0);
+        recv_res = recv_msg(fd, buff);
         message_rc_handler(recv_res, RECV, fd);
-        buff[recv_res] = '\0';
         printf("%s\n", buff);
-        if (!strcmp(buff, "3\n")){
+        if (!strncmp(buff, "3", 1)){
             user.map_size = 3;
-            strcpy(buff, "got map result\n");
-            send_res = send(fd, buff, strlen(buff), 0);
+            strcpy(buff, "waiting for a new clients to create game room\n . . . ");
+            send_res = send_msg(fd, buff);
             message_rc_handler(send_res, SEND, fd);
             break;
         }
@@ -55,11 +55,20 @@ User create_user(int fd){
 //sending message to the group of users 
 void broadcast_message(char * msg, User * user_arr, int arr_size){
     for(int i = 0; i < arr_size; ++i){
-        int send_res = send(user_arr[i].fd, msg, sizeof(msg), 0);
+        int send_res = send_msg(user_arr[i].fd, msg);
         message_rc_handler(send_res, SEND, user_arr[i].fd);
     }
 }
-
+//chech if user sent number and convert it into int
+int str_convert_numset(char * msg, int msglen){
+    printf("str_conv....() : %s\n", msg);
+    char * end;
+    int msg_set = strtol(msg, &end, 10);
+    if (msg == end){//if  pointers are equal that means player sended not number value
+        return -1;
+    }
+    return msg_set;
+}
 
 int game_loop(User * users){
     // !  !  !
@@ -82,18 +91,16 @@ int game_loop(User * users){
         printf("map sizes dont matching\n");
         exit(-1);
     }
-    char turn = 'X';//first start to play X
     Map map = create_map(users, 2, map_size);
     char ** matrix = init_matrix(map_size);
     //send every user it's sign X or O and then broadcast message START to make 
     //them turn into "game started mode" 
     
     //sending signs
-    int sended = send(users[0].fd, "UX", 3, 0);
+    int sended = send_msg(users[0].fd, "UX");
     message_rc_handler(sended, SEND, users[0].fd);
-    sended = send(users[1].fd, "UO", 3, 0);
+    sended = send_msg(users[1].fd, "UO");
     message_rc_handler(sended, SEND, users[1].fd);
-
     //broadcasting start signal
     char * start_signal = "START";
     broadcast_message(start_signal, users, 2);
@@ -108,86 +115,75 @@ int game_loop(User * users){
         if (poll_res < 0){ //if there is error while polling just exitin from the process
             perror("error while polling\n");
             exit(EXIT_FAILURE);
+
         }else{//if finded signal from poll handling it
+
             for (int i = 0; i < 2; ++i){
-                if (fds[i].revents & POLLIN){
-                        int usr_idx = find_usr_by_fd(users, 2, fds[i].fd);//giving user fd to get its index in the users array
-                        //chacking if can user make a step or no
-                        //and if he could, handling message
-                        if (turn == users[usr_idx].sign){
-                            printf("your turn \n");
-                            /*
-                            player sended position is checking in 2 steps 
+                if (fds[i].revents & POLLIN){//find out who sended message
+                    int player_idx = find_usr_by_fd(users, 2, fds[i].fd);
+                    User * player = &users[player_idx];//player means the user who send a signal
+                    User * opponent = &users[1 - player_idx];
+                    //check is message sent a player who not supposted to play not
+                    //send him approack message
+                    if (map.turn != player -> sign){
+                        char * msg = "not your turn";
+                        int send_res = send_msg(player ->fd, msg);
+                        message_rc_handler(send_res, SEND, player -> fd);
+                        //player turn is not now can send message to his opponent
+                        recv_msg(fds[i].fd, buff);
+                        continue;
+                    }
+                    int read_res = recv_msg(fds[i].fd, buff);
+                    message_rc_handler(read_res, RECV, fds[i].fd);
+                    int step_set = str_convert_numset(buff, strlen(buff));
+                    char numstr[16];
+                    strncpy(numstr, buff, 16);
+                    printf("sended number - %d\n", step_set);
+                    if (step_set < 0){
+                        int send_res = send_msg(player -> fd, "not valid format");
+                        message_rc_handler(send_res, SEND, player -> fd);
+                        continue;
+                    }
 
-                            1)binary- checking user sended set with servers set to 
-                            avoid duble step(when trying to play in the already busy position)
-
-                            2)matrix- checking the position in the matrix to avoid duble step
-                            */
-                            int recv_res = recv(users[usr_idx].fd, buff, BUFFSIZE, 0);
-                            message_rc_handler(recv_res, RECV, users[usr_idx].fd);
-                            //handling and converting user sended message from string into decimal
-                            int user_step = convert_str_to_int(buff);//returns int if converted and validate successfull
-                            if (user_step < 1){//if sended unexpected fromat data
-                                //handle case when convertins is aborted or sended message is not right fromat
+                    else{//if everything is OK with text of the sended message, start to handle step
+                        printf("_______________\n");
+                        char * check_msg = user_make_step(&map, matrix, step_set, player ->sign);
+                        char * winner = "WINNER\n";
+                        char * draw = "DRAW\n";
+                        char * waring = "WARING ";
+                        if (check_msg){//check if there is a value in 'check_msg' that mean we find something
+                            printf("%s\n", check_msg);
+                            if (!strncmp(check_msg, winner, strlen(winner))){//if finded winer 
+                                snprintf(buff, BUFFSIZE, "WINNER %c", player ->sign);
+                                broadcast_message(buff, users, 2);    
+                                printf("exiting . . .\n");
+                                exit(0);
                             }
-
-                            //checking position avilability and changeing the matrix (first check)
-                            char * handler = user_make_step(&map, matrix, user_step, users[usr_idx].sign);                            
-                            
-                            //handler possible messages
-                            char * waring_msg = "WARING";
-                            char * ok_message = "OK";
-                            char * draw_msg = "DRAW";
-                            if (handler){
-                                        //if returns waring send handle the case and send user info
-                                        //message occurs if the position where player wanna to step is already in use 
-                                if (!strncmp(handler, waring_msg, strlen(waring_msg))){
-                                    strcpy(buff, handler);
-                                    int send_res = send(users[usr_idx].fd, buff, strlen(buff), 0);
-                                    message_rc_handler(send_res, SEND, users[usr_idx].fd);
-                                }
-                                //handling if user wanna make allowed step and no finded problems
-                                else if (!strncmp(handler, ok_message, strlen(ok_message))){
-                                    int send_res = send(users[usr_idx].fd, ok_message, sizeof(ok_message), 0);
-                                    message_rc_handler(send_res, SEND, users[usr_idx].fd);
-                                    char  msg[3];
-                                    snprintf(msg, 3, "%hd", user_step);
-                                    //after approving player's step we need to send signal into another user about current users step
-                                    //so we need to broadcast message to let everybody know about map changes
-                                    broadcast_message(msg, users, 2);//where 2 is size of the users array 
-                                    
-                                }
-                                else if (!strncmp(handler, draw_msg, strlen(draw_msg))){ //handling case when players drew
-                                    broadcast_message(draw_msg, users, 2);
-                                    break;
-                                    
-                                }
-                            
+                            else if (!strncmp(check_msg, draw, strlen(draw))){//if players drawed 
+                                broadcast_message(draw, users, 2);
+                                printf("exiting . . .\n");
+                                exit(0);
                             }
-                            else if (!handler){//if no finded error  and no winner yet VVV
-                                users[usr_idx].step_set |= user_step;//if all tests passes mergeing users sended step
-                                                                  //with his step set
-                                merge_matrix_and_sets(&map, matrix);
+                            else if (!strncmp(check_msg, waring, strlen(waring))){//if player played in not valid position
+                                send_msg(player ->fd, check_msg);
+                                free(check_msg);
+                                continue;
                             }
-                            /*
-                            handle the step
-                            */
-                            free(handler);
                         }
-                        else{
-                            printf("not your turn\n");
-                            int recv_res = recv(users[usr_idx].fd, buff, BUFFSIZE, 0);
-                            message_rc_handler(recv_res, RECV, users[usr_idx].fd);
-                                
-                            broadcast_message(buff, users, 2);
-                            continue;
-                        }
+                        //if we passes all test and make server render the step
+                        //we are sending the OK message to the sender(player) and 
+                        //sending the player's step to his opponent 
+                        send_msg(player ->fd, "OK\n");
+                        send_msg(opponent ->fd, numstr);
+                        free(check_msg);
+                        map.turn = opponent ->sign;
+                    }
+                    
+
                 }
             }
         }
         printf("end of cycle in game_loop()\n");
-        
     }
     free(matrix);
     return 1;
@@ -195,7 +191,7 @@ int game_loop(User * users){
 
 
 void prepare_game(User * users){
-    char buff[BUFFSIZE];
+    char buff[BUFFSIZE] = {};
     char * msg = "finded second player";
     strncpy(buff, msg, strlen(msg));
     broadcast_message(buff, users, 2);
